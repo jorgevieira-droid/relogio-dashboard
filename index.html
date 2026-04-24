@@ -15,6 +15,16 @@
       justify-content: center;
       min-height: 100vh;
       overflow: hidden;
+      cursor: none;
+    }
+
+    #ghost-cursor {
+      position: fixed;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+      pointer-events: none;
+      z-index: 9999;
     }
 
     .wrapper {
@@ -25,7 +35,6 @@
       gap: 6px;
     }
 
-    /* ── Scanline overlay ── */
     .wrapper::before {
       content: '';
       position: absolute;
@@ -41,7 +50,6 @@
       z-index: 10;
     }
 
-    /* ── Glow container ── */
     .clock-container {
       position: relative;
       padding: 18px 32px 14px;
@@ -55,7 +63,6 @@
         inset 0 0 20px rgba(0,0,0,0.4);
     }
 
-    /* corner accents */
     .clock-container::before,
     .clock-container::after {
       content: '';
@@ -74,7 +81,6 @@
       border-width: 0 2px 2px 0;
     }
 
-    /* ── Time digits ── */
     #time {
       font-family: 'Share Tech Mono', monospace;
       font-size: clamp(2rem, 5vw, 3.4rem);
@@ -85,10 +91,8 @@
         0 0 24px rgba(0, 255, 218, 0.5),
         0 0 60px rgba(0, 255, 218, 0.2);
       line-height: 1;
-      position: relative;
     }
 
-    /* blinking colon */
     #colon {
       display: inline-block;
       animation: blink 1s step-start infinite;
@@ -98,7 +102,6 @@
       50%       { opacity: 0.15; }
     }
 
-    /* ── Date row ── */
     #date {
       font-family: 'Rajdhani', sans-serif;
       font-weight: 300;
@@ -110,7 +113,6 @@
       margin-top: 4px;
     }
 
-    /* ── Thin progress bar (seconds) ── */
     .seconds-bar-track {
       width: 100%;
       height: 2px;
@@ -127,7 +129,6 @@
       box-shadow: 0 0 6px rgba(0,255,218,0.7);
     }
 
-    /* ── Ambient pulse ring ── */
     .pulse-ring {
       position: absolute;
       inset: -28px;
@@ -140,9 +141,36 @@
       0%, 100% { opacity: 0.3; transform: scale(1); }
       50%       { opacity: 0.7; transform: scale(1.012); }
     }
+
+    #status {
+      position: fixed;
+      bottom: 8px;
+      right: 10px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.55rem;
+      color: rgba(0,220,180,0.3);
+      letter-spacing: 0.1em;
+    }
+    #status-dot {
+      display: inline-block;
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: #00ffda;
+      margin-right: 4px;
+      vertical-align: middle;
+      animation: dot-pulse 2s ease-in-out infinite;
+    }
+    @keyframes dot-pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.2; }
+    }
   </style>
 </head>
 <body>
+
+  <div id="ghost-cursor"></div>
+
   <div class="wrapper">
     <div class="pulse-ring"></div>
     <div class="clock-container">
@@ -154,34 +182,96 @@
     <div id="date"></div>
   </div>
 
+  <div id="status"><span id="status-dot"></span>KEEP-ALIVE ATIVO</div>
+
   <script>
-    const DAYS   = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
-    const MONTHS = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+    /* ── 1. RELÓGIO (GMT-3 — São Paulo/Brasília) ── */
+    const TZ = 'America/Sao_Paulo';
 
-    function pad(n) { return String(n).padStart(2, '0'); }
-
-    function tick() {
-      const now = new Date();
-      const h = pad(now.getHours());
-      const m = pad(now.getMinutes());
-      const s = pad(now.getSeconds());
-
-      document.getElementById('time').innerHTML =
-        `${h}<span id="colon">:</span>${m}<span id="colon2">:</span>${s}`;
-
-      const dayName  = DAYS[now.getDay()];
-      const day      = pad(now.getDate());
-      const month    = MONTHS[now.getMonth()];
-      const year     = now.getFullYear();
-      document.getElementById('date').textContent =
-        `${dayName}  ·  ${day} ${month} ${year}`;
-
-      const pct = (now.getSeconds() / 59) * 100;
-      document.getElementById('seconds-bar').style.width = pct + '%';
+    function nowInSP() {
+      // Usa Intl para obter os componentes de data/hora no fuso de São Paulo
+      const f = new Intl.DateTimeFormat('pt-BR', {
+        timeZone: TZ,
+        hour:   '2-digit', minute: '2-digit', second: '2-digit',
+        weekday:'long', day: '2-digit', month: 'short', year: 'numeric',
+        hour12: false
+      });
+      const parts = Object.fromEntries(f.formatToParts(new Date()).map(p => [p.type, p.value]));
+      return parts;
     }
 
+    function tick() {
+      const p = nowInSP();
+      document.getElementById('time').innerHTML =
+        `${p.hour}<span id="colon">:</span>${p.minute}<span id="colon2">:</span>${p.second}`;
+
+      // Capitaliza o dia da semana e formata a data
+      const weekday = p.weekday.charAt(0).toUpperCase() + p.weekday.slice(1);
+      const month   = p.month.replace('.','').charAt(0).toUpperCase() + p.month.replace('.','').slice(1);
+      document.getElementById('date').textContent =
+        `${weekday}  ·  ${p.day} ${month} ${p.year}`;
+
+      document.getElementById('seconds-bar').style.width =
+        ((parseInt(p.second) / 59) * 100) + '%';
+    }
     tick();
     setInterval(tick, 1000);
+
+    /* ── 2. GHOST CURSOR — movimento senoidal invisível ── */
+    const ghost = document.getElementById('ghost-cursor');
+    let t = 0;
+    function moveGhost() {
+      const cx = window.innerWidth  / 2;
+      const cy = window.innerHeight / 2;
+      const x  = cx + (cx * 0.6) * Math.sin(t);
+      const y  = cy + (cy * 0.3) * Math.sin(t * 1.7);
+      ghost.style.left = x + 'px';
+      ghost.style.top  = y + 'px';
+      try {
+        document.dispatchEvent(new MouseEvent('mousemove', {
+          bubbles: true, cancelable: true, clientX: x, clientY: y
+        }));
+      } catch(e) {}
+      t += 0.04;
+    }
+    setInterval(moveGhost, 500);
+
+    /* ── 3. WAKE LOCK API ── */
+    async function requestWakeLock() {
+      if ('wakeLock' in navigator) {
+        try { await navigator.wakeLock.request('screen'); } catch(e) {}
+      }
+    }
+    requestWakeLock();
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') requestWakeLock();
+    });
+
+    /* ── 4. PING DE REDE a cada 30s ── */
+    function networkPing() {
+      fetch('https://www.google.com/generate_204', {
+        mode: 'no-cors', cache: 'no-store'
+      }).catch(() => {});
+    }
+    setInterval(networkPing, 30000);
+    networkPing();
+
+    /* ── 5. AUDIO CONTEXT SILENCIOSO ── */
+    try {
+      const ac   = new (window.AudioContext || window.webkitAudioContext)();
+      const osc  = ac.createOscillator();
+      const gain = ac.createGain();
+      gain.gain.value = 0;
+      osc.connect(gain);
+      gain.connect(ac.destination);
+      osc.start();
+    } catch(e) {}
+
+    /* ── 6. SCROLL SINTÉTICO a cada 2min ── */
+    setInterval(() => {
+      window.scrollBy(0, 1);
+      setTimeout(() => window.scrollBy(0, -1), 300);
+    }, 120000);
   </script>
 </body>
 </html>
