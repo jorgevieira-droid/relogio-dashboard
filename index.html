@@ -272,6 +272,25 @@
       window.scrollBy(0, 1);
       setTimeout(() => window.scrollBy(0, -1), 300);
     }, 120000);
+
+    /* ── 7. CLIQUE SINTÉTICO a cada 10min ── */
+    // Dispara um click no centro da tela — sinal mais forte que scroll/mousemove
+    setInterval(() => {
+      const cx = window.innerWidth  / 2;
+      const cy = window.innerHeight / 2;
+      const el = document.elementFromPoint(cx, cy) || document.body;
+      ['pointerdown','pointerup','click'].forEach(type => {
+        el.dispatchEvent(new PointerEvent(type, {
+          bubbles: true, cancelable: true,
+          clientX: cx, clientY: cy, isPrimary: true
+        }));
+      });
+    }, 600000); // 10 minutos — antes do ciclo de 20min
+
+    /* ── 8. FOCO NA JANELA a cada 5min ── */
+    setInterval(() => {
+      try { window.focus(); document.body.focus(); } catch(e) {}
+    }, 300000);
   </script>
 </body>
 </html>
